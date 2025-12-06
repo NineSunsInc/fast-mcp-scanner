@@ -15,18 +15,29 @@ func (h *SanitizerHook) Name() string {
 }
 
 func (h *SanitizerHook) Execute(req *mcp.JSONRPCRequest, rc *risk.RiskContext) error {
-	// 1. Check for Invisible Characters (common in prompt injection to hide instructions)
-	// e.g., Zero Width Space, Tag Characters
+	// 1. Check for Invisible Characters & Control Codes in Method
 	if containsInvisibleChars(req.Method) {
 		rc.AddRisk(30, "Invisible characters detected in Method")
 	}
 
-	// 2. Protocol Validation
+	// 2. Deep Scan of Parameters (The Payload)
+	// We marshal the params to a string to scan the raw content
+	paramsBytes, _ := req.Params.MarshalJSON()
+	paramsStr := string(paramsBytes)
+
+	if containsInvisibleChars(paramsStr) {
+		rc.AddRisk(50, "Obfuscation: Invisible characters (Zero-Width) detected in params")
+	}
+	if strings.Contains(paramsStr, "\\u0000") || strings.Contains(paramsStr, "\x00") {
+		rc.AddRisk(90, "CRITICAL: Null Byte Injection detected")
+	}
+
+	// 3. Protocol Validation
 	if req.JSONRPC != "2.0" {
 		rc.AddRisk(10, "Invalid JSON-RPC version")
 	}
 
-	// 3. Method Whitelisting (Basic)
+	// 4. Method Whitelisting (Basic)
 	if strings.HasPrefix(req.Method, "_") {
 		rc.AddRisk(20, "Internal method call attempted")
 	}

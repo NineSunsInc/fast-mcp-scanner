@@ -32,6 +32,7 @@ func main() {
 	// Register Pre-Hooks
 	registry.RegisterPre(&hooks.SanitizerHook{})
 	registry.RegisterPre(hooks.NewIntentHook(cfg))
+	registry.RegisterPre(hooks.NewPsychologicalHook())
 	registry.RegisterPre(&hooks.CDRHook{})
 
 	// Register Post-Hooks

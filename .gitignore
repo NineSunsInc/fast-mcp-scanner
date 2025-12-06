@@ -1,3 +1,22 @@
+# Binaries
 citadel
 server.log
+
+# Mac System
 .DS_Store
+
+# Go
+go.sum
+vendor/
+
+# Python / Vision
+services/vision/__pycache__/
+services/vision/venv/
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
+
+# Testing
+tests/artifacts/

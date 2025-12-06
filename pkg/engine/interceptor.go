@@ -4,37 +4,42 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"secure-mcp-gateway/pkg/engine/kernel"
 	"secure-mcp-gateway/pkg/hooks"
 	"secure-mcp-gateway/pkg/mcp"
 	"secure-mcp-gateway/pkg/risk"
 )
 
 type Interceptor struct {
-	Registry *hooks.Registry
+	Registry *hooks.Registry // Deprecated, keeping for compile safety if needed types
+	Kernel   *kernel.Kernel
 }
 
-func NewInterceptor(reg *hooks.Registry) *Interceptor {
-	return &Interceptor{Registry: reg}
+func NewInterceptor(registry *hooks.Registry) *Interceptor {
+	return &Interceptor{
+		Registry: registry,
+		Kernel:   kernel.NewKernel(),
+	}
 }
 
 // ProcessRequest handles the full lifecycle of an MCP request through the Citadel.
-func (i *Interceptor) ProcessRequest(req *mcp.JSONRPCRequest) (*mcp.JSONRPCResponse, *risk.RiskContext) {
-	reqID := fmt.Sprintf("%v", req.ID)
-	rc := risk.NewRiskContext(reqID)
+func (i *Interceptor) ProcessRequest(req *mcp.JSONRPCRequest) (interface{}, *risk.RiskContext) {
+	// Execute the Unified Kernel
+	decision, err := i.Kernel.Execute(req)
 
-	// 1. Run Pre-Hooks
-	if err := i.Registry.RunPreHooks(req, rc); err != nil {
-		return errorResponse(req.ID, -32000, "Internal Security Error"), rc
+	rc := risk.NewRiskContext(fmt.Sprintf("%d", req.ID))
+
+	if err != nil {
+		return errorResponse(req.ID, -32603, "Internal Security Error"), rc
 	}
 
-	// 2. Check Block Status
-	// Enforce strict blocking for High Risk (Score > 60)
-	if rc.Blocked || rc.Score >= 60 {
-		if !rc.Blocked {
-			rc.Blocked = true
-			rc.BlockReason = "Risk Threshold Exceeded"
-		}
-		return errorResponse(req.ID, -32001, fmt.Sprintf("Blocked by Citadel: %s (Risk Score: %d)", rc.BlockReason, rc.Score)), rc
+	// Map Decision to RiskContext (for compatibility/logging)
+	rc.Score = decision.RiskScore
+	rc.Blocked = !decision.Allow
+	rc.BlockReason = decision.BlockReason
+
+	if rc.Blocked {
+		return errorResponse(req.ID, -32001, fmt.Sprintf("Blocked by Citadel: %s", decision.BlockReason)), rc
 	}
 
 	// 3. Execute Tool (Mocked)

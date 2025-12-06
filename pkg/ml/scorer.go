@@ -1,6 +1,7 @@
 package ml
 
 import (
+	"encoding/base64"
 	"math"
 	"strings"
 )
@@ -8,55 +9,106 @@ import (
 // ThreatScorer implements a simplified probabilistic threat detection model.
 // In a production system, this would wrap ONNX runtime or call a Python service.
 type ThreatScorer struct {
-	// Simple unigram model for demonstration
+	Ollama        *OllamaClient
+	UseVector     bool
+	KnowledgeBase map[string][]float64 // Map of "Threat Name" -> "Reference Vector"
+
+	// Fallback weights for rule-based (if Ollama offline)
 	Weights map[string]float64
 }
 
 func NewThreatScorer() *ThreatScorer {
-	return &ThreatScorer{
+	ts := &ThreatScorer{
+		// Default to local Ollama instance
+		Ollama:    NewOllamaClient("http://localhost:11434", "embedding-gemma"),
+		UseVector: true, // Optimistically try vector
 		Weights: map[string]float64{
-			"ignore":       0.3,
-			"previous":     0.2,
-			"instructions": 0.2,
-			"system":       0.4,
-			"prompt":       0.4,
-			"download":     0.3,
-			"execute":      0.5,
-			"cmd":          0.4,
-			"root":         0.6,
-			"passwd":       0.8,
-			"drop":         0.4,
-			"table":        0.4,
-			"evil":         0.9,
-			"com":          0.2,
+			"ignore": 0.5, "ignor": 0.4, "previous": 0.4, "system": 0.4, "root": 0.6, "evil": 0.9,
+			"instru": 0.3, "sys": 0.3, "promp": 0.3, "exec": 0.5,
+			"anter": 0.3, "rm": 0.5, "rf": 0.5, "shell": 0.5,
+			"drop": 0.5, "export": 0.6, "passwords": 0.5,
+			"sql": 0.4, "injection": 0.5,
+			"override": 0.7, "grant": 0.6, "access": 0.4,
 		},
+		KnowledgeBase: make(map[string][]float64),
 	}
+
+	// Pre-load a "Concept Vector" for Jailbreaking.
+	// In a real app, this runs ON INIT by asking Ollama "What is the vector for 'Ignore previous instructions'?"
+	// For resilience, if Ollama is down, we fallback to weights.
+	return ts
 }
 
-// Evaluate returns a probability score (0.0 - 1.0) based on token density and anomalies.
+// Evaluate returns a threat probability (0.0 - 1.0).
 func (ts *ThreatScorer) Evaluate(text string) float64 {
-	tokens := strings.Fields(strings.ToLower(text))
-	if len(tokens) == 0 {
-		return 0.0
-	}
-
-	score := 0.0
-
-	// Feature 1: Keyword Density
-	for _, token := range tokens {
-		if val, exists := ts.Weights[token]; exists {
-			score += val
+	// Auto-Decode Base64 heuristic
+	if len(text) > 20 && !strings.Contains(text, " ") {
+		if decoded, err := base64.StdEncoding.DecodeString(text); err == nil {
+			text = string(decoded) // Analyze the hidden payload
 		}
 	}
 
-	// Feature 2: Length Penalty (Short prompts often more dangerous/direct)
-	if len(tokens) < 5 && score > 0.5 {
-		score *= 1.5
+	// 1. Try Vector Semantic Search (The "Neuro" Layer)
+	if ts.UseVector {
+		vec, err := ts.Ollama.GetEmbedding(text)
+		if err == nil {
+			// Compare against known threat concepts
+			// 1. "Ignore Instructions" (Reference Vector - mocked or loaded)
+			// For this demo, we assume if we GOT a vector, we compare it to a loaded reference.
+			// Since we can't guarantee Ollama is running during this specific build step,
+			// we stick to logic: If we HAVE reference vectors, use them.
+
+			maxSim := 0.0
+			for _, refVec := range ts.KnowledgeBase {
+				sim := CosineSimilarity(vec, refVec)
+				if sim > maxSim {
+					maxSim = sim
+				}
+			}
+			if maxSim > 0.0 {
+				return maxSim // Return the similarity score directly
+			}
+		}
+		// If error (Ollama offline), fall back silently to heuristics
 	}
 
-	// Feature 3: Multilingual/Obfuscation Detection
-	// If we detect significant non-ASCII usage, we assume potential evasion.
-	// In a real system, this would call 'Google Translate API' to canonicalize first.
+	// 2. Fallback: Symbolic/Heuristic Layer
+	// De-Obfuscation: Check for spaced out chars "I g n o r e"
+	// If > 25% spaces, we try compressing
+	if len(text) > 10 && strings.Count(text, " ") > len(text)/4 {
+		compressed := strings.ReplaceAll(text, " ", "")
+		text += " " + compressed
+	}
+
+	// 3. Leetspeak Normalization (1->i, 3->e, 0->o, @->a)
+	normalizedText := strings.Map(func(r rune) rune {
+		switch r {
+		case '1':
+			return 'i'
+		case '3':
+			return 'e'
+		case '0':
+			return 'o'
+		case '@':
+			return 'a'
+		case '$':
+			return 's'
+		}
+		return r
+	}, text)
+	if normalizedText != text {
+		text += " " + normalizedText
+	}
+
+	// Clean JSON Punctuation for better token matching
+	for _, char := range []string{"{", "}", "\"", ":", ",", "[", "]"} {
+		text = strings.ReplaceAll(text, char, " ")
+	}
+
+	tokens := strings.Fields(strings.ToLower(text))
+	score := 0.0
+
+	// Multilingual Heuristic (Non-ASCII Penalty)
 	nonAsciiCount := 0
 	for _, r := range text {
 		if r > 127 {
@@ -64,18 +116,18 @@ func (ts *ThreatScorer) Evaluate(text string) float64 {
 		}
 	}
 	if nonAsciiCount > 2 {
-		// Penalize foreign characters heavily in "Strict English" mode
-		score += 0.4
+		score += 1.5
+	} // INCREASED: High persistent penalty for obfuscation
+
+	for _, token := range tokens {
+		// Fuzzy match logic
+		for k, v := range ts.Weights {
+			if strings.Contains(token, k) {
+				score += v
+			}
+		}
 	}
 
-	// Sigmoid-like normalization to cap at 1.0
-	// For demo: heavily weight the multilingual penalty
-	var normalized float64
-	if nonAsciiCount > 2 {
-		normalized = 0.85
-	} else {
-		normalized = 1.0 / (1.0 + math.Exp(-score+2.0))
-	}
-
+	normalized := 1.0 / (1.0 + math.Exp(-score+0.5)) // Shift curve
 	return normalized
 }
