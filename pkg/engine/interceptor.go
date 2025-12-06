@@ -29,7 +29,7 @@ func (i *Interceptor) ProcessRequest(req *mcp.JSONRPCRequest) (*mcp.JSONRPCRespo
 
 	// 2. Check Block Status
 	// Enforce strict blocking for High Risk (Score > 60)
-	if rc.Blocked || rc.Level() >= risk.RiskHigh {
+	if rc.Blocked || rc.Score >= 60 {
 		if !rc.Blocked {
 			rc.Blocked = true
 			rc.BlockReason = "Risk Threshold Exceeded"

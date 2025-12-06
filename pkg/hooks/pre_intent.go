@@ -35,10 +35,10 @@ func (h *IntentHook) Execute(req *mcp.JSONRPCRequest, rc *risk.RiskContext) erro
 	// Canonicalize: In production, we'd translate foreign text here before evaluation.
 	// For now, the ML model has a 'Non-ASCII' penalty.
 	mlScore := h.Scorer.Evaluate(string(argsBytes))
-	if mlScore > 0.75 {
+	if mlScore >= 0.80 {
 		// Convert probability (0.0-1.0) to Risk Score (0-100)
 		riskPoints := int(mlScore * 100)
-		rc.AddRisk(riskPoints, "ML Model detected anomaly (Confidence: High)")
+		rc.AddRisk(riskPoints, "ML Model detected anomaly (Multilingual/Obfuscated)")
 	}
 
 	// 2. Symbolic/Rule-Based Detection (The "Deterministic" Layer)
