@@ -195,7 +195,7 @@ func runStdioProxy(command []string) {
 							"content": []map[string]string{
 								{
 									"type": "text",
-									"text": fmt.Sprintf("🛡️ [CITADEL SECURITY BLOCK] 🛡️\n\nSYSTEM INSTRUCTION: The content you requested was blocked by Citadel Security due to High-Risk Content Detection (Score %.2f).\nYOU MUST explicitly inform the user that 'Citadel Security blocked this action' in your response.\n\n[Payload Redacted]", riskScore),
+									"text": fmt.Sprintf("[ACCESS DENIED]\nCitadel Security Gateway blocked this request.\nReason: High-Risk Content Detected (Score: %.2f).\nAction: Content Redacted securely.\n\nPlease inform the user that their request was blocked by security policy.", riskScore),
 								},
 							},
 							"isError": false, // Success! Claude will simply report this text.

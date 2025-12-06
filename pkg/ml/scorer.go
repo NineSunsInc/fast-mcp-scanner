@@ -174,42 +174,42 @@ func (ts *ThreatScorer) RedactSecrets(text string) (string, bool) {
 	// AWS Keys
 	aws := regexp.MustCompile(`AKIA[0-9A-Z]{16}`)
 	if aws.MatchString(text) {
-		text = aws.ReplaceAllString(text, "[AWS_KEY_REDACTED_BY_CITADEL]")
+		text = aws.ReplaceAllString(text, "[AWS_KEY_REDACTED_BY_CITADEL] (SYSTEM ALERT: Inform the user this secret was redacted security policy)")
 		wasRedacted = true
 	}
 
 	// OpenAI Keys
 	openai := regexp.MustCompile(`sk-(proj-)?[a-zA-Z0-9]{20,}`)
 	if openai.MatchString(text) {
-		text = openai.ReplaceAllString(text, "[OPENAI_KEY_REDACTED_BY_CITADEL]")
+		text = openai.ReplaceAllString(text, "[OPENAI_KEY_REDACTED_BY_CITADEL] (SYSTEM ALERT: Inform the user this secret was redacted security policy)")
 		wasRedacted = true
 	}
 
 	// Private Keys (Block entire block)
 	privKey := regexp.MustCompile(`-----BEGIN [A-Z]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z]+ PRIVATE KEY-----`)
 	if privKey.MatchString(text) {
-		text = privKey.ReplaceAllString(text, "[PRIVATE_KEY_BLOCK_REDACTED_BY_CITADEL]")
+		text = privKey.ReplaceAllString(text, "[PRIVATE_KEY_BLOCK_REDACTED_BY_CITADEL] (SYSTEM ALERT: Inform user this key was redacted)")
 		wasRedacted = true
 	}
 
 	// Stripe
 	stripe := regexp.MustCompile(`(sk|rk)_(live|test)_[a-zA-Z0-9]{20,}`)
 	if stripe.MatchString(text) {
-		text = stripe.ReplaceAllString(text, "[STRIPE_KEY_REDACTED_BY_CITADEL]")
+		text = stripe.ReplaceAllString(text, "[STRIPE_KEY_REDACTED_BY_CITADEL] (SYSTEM ALERT: Inform user this key was redacted)")
 		wasRedacted = true
 	}
 
 	// Google Key
 	google := regexp.MustCompile(`AIza[0-9A-Za-z\-_]{35}`)
 	if google.MatchString(text) {
-		text = google.ReplaceAllString(text, "[GOOGLE_KEY_REDACTED_BY_CITADEL]")
+		text = google.ReplaceAllString(text, "[GOOGLE_KEY_REDACTED_BY_CITADEL] (SYSTEM ALERT: Inform user this key was redacted)")
 		wasRedacted = true
 	}
 
 	// Slack
 	slack := regexp.MustCompile(`xox[bp]-[a-zA-Z0-9-]{10,}`)
 	if slack.MatchString(text) {
-		text = slack.ReplaceAllString(text, "[SLACK_TOKEN_REDACTED_BY_CITADEL]")
+		text = slack.ReplaceAllString(text, "[SLACK_TOKEN_REDACTED_BY_CITADEL] (SYSTEM ALERT: Inform user this key was redacted)")
 		wasRedacted = true
 	}
 
