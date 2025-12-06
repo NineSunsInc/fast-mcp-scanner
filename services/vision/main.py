@@ -5,17 +5,46 @@ import numpy as np
 import cv2
 import io
 from PIL import Image
+from presidio_analyzer import AnalyzerEngine
+import logging
+from pydantic import BaseModel
 
 app = FastAPI(title="Citadel Vision Engine")
 
+# Initialize Presidio Analyzer (Loads NLP Model)
+print("🧠 Loading Presidio NLP Engine...")
+analyzer = AnalyzerEngine()
+print("✅ Presidio Loaded")
+
 # Initialize PaddleOCR (Loads model into memory once)
-# use_angle_cls=True allows detecting rotated text
-# lang='en' (Paddle supports multilingual, will auto-detect usually or we can parameterize)
-ocr = PaddleOCR(use_angle_cls=True, lang='en', show_log=False) 
+# v3 Change: use_angle_cls -> use_textline_orientation
+# v3 Change: show_log removed (controlled via logging config)
+ocr = PaddleOCR(use_textline_orientation=True, lang='en') 
+
+class TextRequest(BaseModel):
+    text: str
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "model": "paddleocr-v2.7"}
+    return {"status": "ok", "service": "vision-analysis-sidecar"}
+
+@app.post("/analyze")
+async def analyze_text(req: TextRequest):
+    # Analyze text for PII
+    results = analyzer.analyze(text=req.text, language='en')
+    
+    # Transform to simple JSON
+    pii_found = []
+    for r in results:
+        pii_found.append({
+            "type": r.entity_type,
+            "score": r.score,
+            "start": r.start,
+            "end": r.end,
+            "text": req.text[r.start:r.end] # Return snippet for debugging/logging
+        })
+    
+    return {"pii": pii_found, "count": len(pii_found)}
 
 @app.post("/scan")
 async def scan_image(file: UploadFile = File(...)):

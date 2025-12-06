@@ -6,12 +6,18 @@ server.log
 .DS_Store
 
 # Go
-go.sum
+# go.sum SHOULD be committed for reproducible builds
 vendor/
 
 # Python / Vision
 services/vision/__pycache__/
 services/vision/venv/
+services/vision/.venv/
+*.pyc
+
+# Logs
+*.log
+/tmp/citadel.log
 *.pyc
 
 # IDEs
@@ -20,3 +26,11 @@ services/vision/venv/
 
 # Testing
 tests/artifacts/
+WALKTHROUGH.md
+ROADMAP_OCR_IFC.md
+GAP_ANALYSIS_REV2.md
+GAP_ANALYSIS_2025.md
+FEATURE_SENTINEL.md
+FEATURE_IDENTITY_GRAPH.md
+IMPLEMENTATION_PLAN_KERNEL.md
+ARCHITECTURE_UNIFIED_KERNEL.md

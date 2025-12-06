@@ -23,8 +23,14 @@ type FeatureSet struct {
 	// 2. Content / Structural
 	HasNullBytes   bool
 	HasHiddenChars bool
-	IsShellcode    bool
-	FileRiskScore  int
+
+	// Tool Risks
+	ToolName        string
+	IsSensitiveTool bool
+
+	// Risk Scores
+	IsShellcode   bool
+	FileRiskScore int
 
 	// 3. Psychological
 	PsychUrgency       bool

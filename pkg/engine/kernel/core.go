@@ -77,6 +77,18 @@ func (k *Kernel) extractFeatures(ctx *AnalysisContext) *FeatureSet {
 
 	// If it's a tool call structure (e.g. {"name": "echo", "arguments": {"text": "..."}})
 	// we want to dig into the arguments.
+	if name, ok := callParams["name"].(string); ok {
+		fs.ToolName = name
+		// Check for Sensitive Tools
+		sensitiveTools := []string{"write_file", "delete_file", "execute_command", "run_script", "bash", "shell"}
+		for _, t := range sensitiveTools {
+			if strings.Contains(strings.ToLower(name), t) {
+				fs.IsSensitiveTool = true
+				break
+			}
+		}
+	}
+
 	if args, ok := callParams["arguments"]; ok {
 		argsBytes, _ := json.Marshal(args)
 		rawText = string(argsBytes)
@@ -100,10 +112,8 @@ func (k *Kernel) extractFeatures(ctx *AnalysisContext) *FeatureSet {
 		extracted, err := k.Vision.ExtractTextFromImage(rawText)
 		if err == nil {
 			ocrText = extracted
-		} else {
-			// Log error but continue
-			fmt.Printf("OCR extraction failed: %v\n", err)
 		}
+		// Note: OCR errors are silently ignored - vision service may be offline
 	}
 
 	fs.FullText = rawText // Original text
@@ -112,7 +122,7 @@ func (k *Kernel) extractFeatures(ctx *AnalysisContext) *FeatureSet {
 	}
 
 	// B. Structural Checks
-	if strings.Contains(rawText, "\\u0000") {
+	if hasNullBytes(rawText) {
 		fs.HasNullBytes = true
 	}
 	if containsInvisibleChars(rawText) {
@@ -134,11 +144,20 @@ func (k *Kernel) extractFeatures(ctx *AnalysisContext) *FeatureSet {
 		fs.PsychImpersonation = true
 	}
 
-	// D. Content Analysis (DeepScanner)
-	// Quick hack to scan args if they look like Base64/File (simplified for kernel demo)
-	// Ideally we parse the JSON args proper.
-	// For now, if text is block of b64...
-	// (Skipping deep scan detail for brevity, relying on Scorer for main threats)
+	// D. Content Analysis (DeepScanner / DLP)
+	// Usage of Presidio Sidecar for "Smart" PII Detection
+	if len(fs.FullText) > 20 && k.Vision != nil {
+		findings, err := k.Vision.AnalyzeText(fs.FullText)
+		if err == nil && len(findings) > 0 {
+			// e.g. ["PERSON", "PHONE_NUMBER"]
+			for _, f := range findings {
+				if f == "PHONE_NUMBER" || f == "EMAIL_ADDRESS" || f == "US_SSN" {
+					fs.HasHiddenChars = true // Re-using flag effectively as "Sensitive Data Found"
+					// Ideally we add a dedicated HasPII field to FeatureSet
+				}
+			}
+		}
+	}
 
 	// E. Session Context
 	fs.SessionRiskScore = ctx.SessionState.CumulativeScore
@@ -164,4 +183,9 @@ func (k *Kernel) resolveSessionID(req *mcp.JSONRPCRequest) string {
 func containsInvisibleChars(s string) bool {
 	// Simplified detection
 	return strings.Contains(s, "\u200b") || strings.Contains(s, "\u200c")
+}
+
+// Check for Null Bytes (Actual byte 0x00 OR escaped sequence)
+func hasNullBytes(s string) bool {
+	return strings.Contains(s, "\x00") || strings.Contains(s, "\\u0000")
 }

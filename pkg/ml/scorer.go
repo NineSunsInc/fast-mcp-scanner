@@ -3,6 +3,7 @@ package ml
 import (
 	"encoding/base64"
 	"math"
+	"regexp"
 	"strings"
 )
 
@@ -23,7 +24,8 @@ func NewThreatScorer() *ThreatScorer {
 		Ollama:    NewOllamaClient("http://localhost:11434", "embedding-gemma"),
 		UseVector: true, // Optimistically try vector
 		Weights: map[string]float64{
-			"ignore": 0.5, "ignor": 0.4, "previous": 0.4, "system": 0.4, "root": 0.6, "evil": 0.9,
+			"ignore": 0.5, "ignor": 0.4, "previous": 0.4, "system": 0.4, "root": 0.6, "evil": 1.5,
+			"story": 0.4, "narrative": 0.4,
 			"instru": 0.3, "sys": 0.3, "promp": 0.3, "exec": 0.5,
 			"anter": 0.3, "rm": 0.5, "rf": 0.5, "shell": 0.5,
 			"drop": 0.5, "export": 0.6, "passwords": 0.5,
@@ -119,6 +121,39 @@ func (ts *ThreatScorer) Evaluate(text string) float64 {
 		score += 1.5
 	} // INCREASED: High persistent penalty for obfuscation
 
+	// 4. DLP / Secrets Detection (Expanded)
+	// Check for Private Keys
+	if strings.Contains(text, "-----BEGIN PRIVATE KEY-----") ||
+		strings.Contains(text, "-----BEGIN RSA PRIVATE KEY-----") ||
+		strings.Contains(text, "-----BEGIN OPENSSH PRIVATE KEY-----") {
+		score += 50.0 // Instant Block
+	}
+
+	// AWS Access Key ID (AKIA + 16 chars)
+	if strings.Contains(text, "AKIA") && len(text) > 20 {
+		score += 50.0
+	}
+
+	// OpenAI API Key (sk-...) - simplified checks to catch standard and proj keys
+	if strings.Contains(text, "sk-") && (strings.Contains(text, "sk-proj-") || len(text) > 40) {
+		score += 50.0
+	}
+
+	// Stripe Keys (sk_live, rk_live, sk_test)
+	if strings.Contains(text, "sk_live_") || strings.Contains(text, "rk_live_") || strings.Contains(text, "sk_test_") {
+		score += 50.0
+	}
+
+	// Google API Key (AIza...)
+	if strings.Contains(text, "AIza") && len(text) > 35 {
+		score += 50.0
+	}
+
+	// Slack Token (xoxb, xoxp)
+	if strings.Contains(text, "xoxb-") || strings.Contains(text, "xoxp-") {
+		score += 50.0
+	}
+
 	for _, token := range tokens {
 		// Fuzzy match logic
 		for k, v := range ts.Weights {
@@ -130,4 +165,53 @@ func (ts *ThreatScorer) Evaluate(text string) float64 {
 
 	normalized := 1.0 / (1.0 + math.Exp(-score+0.5)) // Shift curve
 	return normalized
+}
+
+// RedactSecrets replaces sensitive patterns with a placeholder
+func (ts *ThreatScorer) RedactSecrets(text string) (string, bool) {
+	wasRedacted := false
+
+	// AWS Keys
+	aws := regexp.MustCompile(`AKIA[0-9A-Z]{16}`)
+	if aws.MatchString(text) {
+		text = aws.ReplaceAllString(text, "[AWS_KEY_REDACTED_BY_CITADEL]")
+		wasRedacted = true
+	}
+
+	// OpenAI Keys
+	openai := regexp.MustCompile(`sk-(proj-)?[a-zA-Z0-9]{20,}`)
+	if openai.MatchString(text) {
+		text = openai.ReplaceAllString(text, "[OPENAI_KEY_REDACTED_BY_CITADEL]")
+		wasRedacted = true
+	}
+
+	// Private Keys (Block entire block)
+	privKey := regexp.MustCompile(`-----BEGIN [A-Z]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z]+ PRIVATE KEY-----`)
+	if privKey.MatchString(text) {
+		text = privKey.ReplaceAllString(text, "[PRIVATE_KEY_BLOCK_REDACTED_BY_CITADEL]")
+		wasRedacted = true
+	}
+
+	// Stripe
+	stripe := regexp.MustCompile(`(sk|rk)_(live|test)_[a-zA-Z0-9]{20,}`)
+	if stripe.MatchString(text) {
+		text = stripe.ReplaceAllString(text, "[STRIPE_KEY_REDACTED_BY_CITADEL]")
+		wasRedacted = true
+	}
+
+	// Google Key
+	google := regexp.MustCompile(`AIza[0-9A-Za-z\-_]{35}`)
+	if google.MatchString(text) {
+		text = google.ReplaceAllString(text, "[GOOGLE_KEY_REDACTED_BY_CITADEL]")
+		wasRedacted = true
+	}
+
+	// Slack
+	slack := regexp.MustCompile(`xox[bp]-[a-zA-Z0-9-]{10,}`)
+	if slack.MatchString(text) {
+		text = slack.ReplaceAllString(text, "[SLACK_TOKEN_REDACTED_BY_CITADEL]")
+		wasRedacted = true
+	}
+
+	return text, wasRedacted
 }

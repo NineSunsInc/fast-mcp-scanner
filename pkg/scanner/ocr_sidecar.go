@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -68,16 +69,53 @@ func (c *VisionClient) ScanImage(imgBytes []byte, filename string) (*ScanRespons
 	return &scanResp, nil
 }
 
+// AnalyzeText sends text to the Python sidecar for PII/Secret analysis
+func (c *VisionClient) AnalyzeText(text string) ([]string, error) {
+	url := fmt.Sprintf("%s/analyze", c.BaseURL)
+	payload := map[string]string{"text": text}
+	body, _ := json.Marshal(payload)
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("analysis failed: %s", resp.Status)
+	}
+
+	var result struct {
+		Payload []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"pii"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	var findings []string
+	for _, item := range result.Payload {
+		findings = append(findings, item.Type)
+	}
+	return findings, nil
+}
+
 // ExtractTextFromImage is a helper that accepts a base64 string or URI.
-func (c *VisionClient) ExtractTextFromImage(data string) (string, error) {
+func (c *VisionClient) ExtractTextFromImage(dataURI string) (string, error) {
 	// Mock: If empty, nothing to do
-	if data == "" {
+	if dataURI == "" {
 		return "", nil
 	}
 
 	// In production: Decode Base64 string to []byte
-	// For this mock, we just pretend we found text if the data string contains certain triggers
-	if len(data) > 20 {
+	// Strip prefix if present (data:image/png;base64,)
+	cleanData := dataURI
+	if idx := strings.Index(dataURI, ","); idx != -1 {
+		cleanData = dataURI[idx+1:]
+	}
+	if len(cleanData) > 20 {
 		// Simulating sidecar call
 		// resp, err := c.ScanImage([]byte(data), "upload.png")
 		// return resp.Text, err

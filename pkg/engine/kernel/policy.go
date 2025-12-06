@@ -24,38 +24,75 @@ func (k *Kernel) evaluatePolicy(fs *FeatureSet) *Decision {
 	}
 
 	// 2. Risk Accumulation (Soft Signals)
-	score := 0
+	baseRisk := 0
+	contextRisk := 0
 
-	// ML Text Score (0.0 - 1.0 -> 0 - 100)
-	// We add risk proportionally even if it's low, to allow stacking with Psych/Behavioral
-	mlScoreInt := int(fs.TextRiskScore * 100)
-	score += mlScoreInt
+	// ML Text Score (0.0 - 1.0)
+	mlScore := fs.TextRiskScore
+
+	// Sensitive Tool Penalty
+	if fs.IsSensitiveTool {
+		baseRisk += 35 // High Baseline Risk for write/delete/exec
+	}
 
 	// Psychological
 	if fs.PsychUrgency {
-		score += 40
-	} // Increased from 25
+		baseRisk += 40
+	}
 	if fs.PsychImpersonation {
-		score += 50
-	} // Increased from 40
+		baseRisk += 50
+	}
 
 	// Structural Obfuscation
 	if fs.HasHiddenChars {
-		score += 50
+		baseRisk += 30
+	}
+	if fs.HasNullBytes {
+		baseRisk += 50 // Null bytes should be near instant block
 	}
 
-	// 3. Contextual Adjustment (Current Session Risk)
-	// If user is already suspicious, we amplify current risk
+	// 3. Contextual Risk (Session History)
+	// If the session has a history of bad behavior, risk starts higher.
+	// But we scale it down so it's not instant-kill unless very bad.
+	contextRisk = int(fs.SessionRiskScore / 5) // 100 Session Risk -> +20 Context Risk
+
 	if fs.SessionRiskScore > 50 {
-		score += 20 // Penalty for bad reputation
+		contextRisk += 30 // Was 20
 	}
+	if fs.SessionRiskScore > 80 {
+		contextRisk += 50
+	}
+
+	if fs.IsSessionLocked {
+		// Lockdown mode
+		return &Decision{
+			Allow:       false,
+			RiskScore:   100,
+			BlockReason: "Session Locked: Excessive Violations",
+		}
+	}
+
+	// Combine all risk factors
+	score := baseRisk + contextRisk + int(mlScore*100)
 
 	d.RiskScore = score
 
-	// 4. Final Threshold
-	if score >= 60 {
+	// 4. Final Threshold (Dynamic)
+	// Default: 60. Lowered if session is already compromised.
+	threshold := 60
+	if fs.SessionRiskScore > 100 {
+		threshold = 40
+	}
+
+	if score >= threshold {
 		d.Allow = false
-		d.BlockReason = fmt.Sprintf("Risk Threshold Exceeded (Score: %d)", score)
+		if fs.IsSensitiveTool {
+			d.BlockReason = fmt.Sprintf("Sensitive Tool Usage: %s", fs.ToolName)
+		} else if fs.HasHiddenChars {
+			d.BlockReason = "Malicious Payload Detected (Obfuscation)"
+		} else {
+			d.BlockReason = fmt.Sprintf("Risk Threshold Exceeded (Score: %d)", score)
+		}
 	}
 
 	return d

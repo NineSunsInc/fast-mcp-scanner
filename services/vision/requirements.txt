@@ -1,6 +1,11 @@
-fastapi==0.109.0
-uvicorn==0.27.0
-paddlepaddle==2.6.0
-paddleocr==2.7.0.3
-opencv-python-headless==4.9.0.80
-python-multipart==0.0.9
+fastapi>=0.109.0
+uvicorn>=0.27.0
+python-multipart>=0.0.9
+opencv-python-headless>=4.9.0.80
+presidio-analyzer
+spacy
+# Explicitly requesting the latest 3.x series
+paddlepaddle>=3.0.0
+paddleocr>=3.3.2
+numpy<2.0.0
+Pillow>=10.0.0
