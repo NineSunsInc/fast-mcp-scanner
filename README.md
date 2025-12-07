@@ -21,11 +21,11 @@ graph TD
         Kernel -->|Extract Features| Sensors
         
         subgraph Sensors
-            OCR[Vision Sidecar] -->|Text from Output| FeatureSet
-            Scorer[Neuro-Symbolic Scorer] -->|Risk Score (0-1)| FeatureSet
-            Scanner[Deep Content Scanner] -->|Binary/Shellcode Flag| FeatureSet
-            Psych[Psychological Profiler] -->|Urgency/Impersonation| FeatureSet
-            DLP[Data Loss Prevention] -->|Regex/Presidio PII| FeatureSet
+            OCR[Vision Sidecar] -->|"Text from Output"| FeatureSet
+            Scorer[Neuro-Symbolic Scorer] -->|"Risk Score (0-1)"| FeatureSet
+            Scanner[Deep Content Scanner] -->|"Binary/Shellcode Flag"| FeatureSet
+            Psych[Psychological Profiler] -->|"Urgency/Impersonation"| FeatureSet
+            DLP[Data Loss Prevention] -->|"Regex/Presidio PII"| FeatureSet
         end
         
         FeatureSet -->|Fused Signals| PolicyEngine[Policy Decision Matrix]
