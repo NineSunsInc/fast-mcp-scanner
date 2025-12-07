@@ -13,32 +13,32 @@ The Citadel operates on a "One-Pass" Kernel architecture, fusing signals from mu
 
 ```mermaid
 graph TD
-    Client["GenAI Client (Claude/Gemini)"] -->|JSON-RPC Request| Citadel[Citadel Gateway]
+    Client["GenAI Client"] -->|"JSON-RPC Request"| Citadel["Citadel Gateway"]
     
     subgraph "Unified Defense Kernel"
-        Citadel -->|Request Context| Kernel
+        Citadel -->|"Request Context"| Kernel
         
-        Kernel -->|Extract Features| Sensors
+        Kernel -->|"Extract Features"| Sensors
         
         subgraph Sensors
-            OCR[Vision Sidecar] -->|"Text from Output"| FeatureSet
-            Scorer[Neuro-Symbolic Scorer] -->|"Risk Score (0-1)"| FeatureSet
-            Scanner[Deep Content Scanner] -->|"Binary/Shellcode Flag"| FeatureSet
-            Psych[Psychological Profiler] -->|"Urgency/Impersonation"| FeatureSet
-            DLP[Data Loss Prevention] -->|"Regex/Presidio PII"| FeatureSet
+            OCR["Vision Sidecar"] -->|"Text from Output"| FeatureSet
+            Scorer["Neuro-Symbolic Scorer"] -->|"Risk Score 0-1"| FeatureSet
+            Scanner["Deep Content Scanner"] -->|"Binary Shellcode Flag"| FeatureSet
+            Psych["Psychological Profiler"] -->|"Urgency Impersonation"| FeatureSet
+            DLP["Data Loss Prevention"] -->|"Regex Presidio PII"| FeatureSet
         end
         
-        FeatureSet -->|Fused Signals| PolicyEngine[Policy Decision Matrix]
+        FeatureSet -->|"Fused Signals"| PolicyEngine["Policy Decision Matrix"]
     end
     
-    PolicyEngine -->|Decision (Allow/Block)| Enforcer
+    PolicyEngine -->|"Decision Allow Block"| Enforcer
     
-    Enforcer -->|Safe Request| Server[MCP Server (Tools)]
-    Enforcer -->|Blocked Request| Client
+    Enforcer -->|"Safe Request"| Server["MCP Server Tools"]
+    Enforcer -->|"Blocked Request"| Client
     
-    Server -->|Result Data| Citadel
-    Citadel --Output Scanner--> Kernel
-    Kernel --Sanitized Result--> Client
+    Server -->|"Result Data"| Citadel
+    Citadel -- "Output Scanner" --> Kernel
+    Kernel -- "Sanitized Result" --> Client
 ```
 
 ## 🚀 Quick Start Guide
